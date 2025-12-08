@@ -1,7 +1,5 @@
 package client
 
-import "crypto/ed25519"
-
 type Member struct {
 	Key       string `yaml:"key" json:"key"`
 	Metadata  string `yaml:"metadata" json:"metadata"`
@@ -24,10 +22,4 @@ type RequestBody struct {
 	MasterKey string `json:"masterKey"`
 	Member    Member `json:"member"`
 	Body      Body   `json:"body"`
-}
-
-type Client struct {
-	Config     *Config
-	PublicKey  string
-	PrivateKey ed25519.PrivateKey
 }

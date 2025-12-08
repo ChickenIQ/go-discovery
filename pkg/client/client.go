@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,14 +11,21 @@ import (
 	"time"
 )
 
+type Client struct {
+	Config     *Config
+	PublicKey  string
+	PrivateKey ed25519.PrivateKey
+}
+
+// NewClient creates a new Client instance from the provided configuration.
 func NewClient(c *Config) (*Client, error) {
-	keyBytes, err := base64.StdEncoding.DecodeString(c.Member.Key)
+	keyBytes, err := b64Decode(c.Member.Key)
 	if err != nil {
 		return nil, err
 	}
 
 	key := ed25519.PrivateKey(keyBytes)
-	pubKey := base64.StdEncoding.EncodeToString(key.Public().(ed25519.PublicKey))
+	pubKey := b64Encode(key.Public().(ed25519.PublicKey))
 
 	return &Client{
 		Config:     c,
@@ -28,7 +34,8 @@ func NewClient(c *Config) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Update(body string) error {
+// Sync sends the provided body to the server and retrieves the list of entries, verifying their signatures.
+func (c *Client) Sync(body string) (*[]Entry, error) {
 	timestamp := time.Now().UnixMilli()
 	bodySignature := ed25519.Sign(c.PrivateKey, fmt.Append([]byte(body), timestamp))
 
@@ -44,25 +51,43 @@ func (c *Client) Update(body string) error {
 		Body: Body{
 			Data:      body,
 			Timestamp: timestamp,
-			Signature: base64.StdEncoding.EncodeToString(bodySignature),
+			Signature: b64Encode(bodySignature),
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	resp, err := http.Post(c.Config.ServerURL, "application/json", bytes.NewReader(data))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	fmt.Println(string(respBody))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(respBody))
+	}
 
-	return nil
+	var entries []Entry
+	if err := json.Unmarshal(respBody, &entries); err != nil {
+		return nil, err
+	}
+
+	masterKey, err := b64Decode(c.Config.MasterKey)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range entries {
+		if !entries[i].IsValid(ed25519.PublicKey(masterKey)) {
+			return nil, fmt.Errorf("invalid entry for member: %s", entries[i].Member.Key)
+		}
+	}
+
+	return &entries, nil
 }
