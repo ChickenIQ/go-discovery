@@ -37,7 +37,7 @@ func NewClient(c *Config) (*Client, error) {
 // Sync sends the provided body to the server and retrieves the list of entries, verifying their signatures.
 func (c *Client) Sync(body string) (*[]Entry, error) {
 	timestamp := time.Now().UnixMilli()
-	bodySignature := ed25519.Sign(c.PrivateKey, fmt.Append([]byte(body), timestamp))
+	bodySignature := ed25519.Sign(c.PrivateKey, fmt.Append([]byte(c.Config.Member.Signature), body, timestamp))
 
 	data, err := json.Marshal(RequestBody{
 		MasterKey: c.Config.MasterKey,

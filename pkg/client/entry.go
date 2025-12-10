@@ -32,6 +32,6 @@ func (e *Entry) IsValid(masterKey ed25519.PublicKey) bool {
 		return false
 	}
 
-	bodyData := fmt.Append([]byte(e.Body.Data), e.Body.Timestamp)
+	bodyData := fmt.Append([]byte(e.Member.Signature), e.Body.Data, e.Body.Timestamp)
 	return ed25519.Verify(ed25519.PublicKey(memberKey), bodyData, bodySignature)
 }
