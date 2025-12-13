@@ -18,7 +18,7 @@ type Client struct {
 }
 
 // NewClient creates a new Client instance from the provided configuration.
-func NewClient(c *Config) (*Client, error) {
+func New(c *Config) (*Client, error) {
 	keyBytes, err := b64Decode(c.Member.Key)
 	if err != nil {
 		return nil, err

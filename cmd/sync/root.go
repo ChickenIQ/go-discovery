@@ -35,7 +35,7 @@ var RootCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := client.NewClient(&cfg)
+		client, err := client.New(&cfg)
 		if err != nil {
 			return err
 		}
