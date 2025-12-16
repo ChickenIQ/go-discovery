@@ -1,2 +1,3 @@
-# A simple client implementation for my Discovery Service
+# A go library for my discovery service
+
 Server: https://github.com/ChickenIQ/cf-discovery

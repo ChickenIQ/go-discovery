@@ -1,93 +1,52 @@
 package client
 
 import (
-	"bytes"
 	"crypto/ed25519"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
-	"io"
-	"net/http"
 
-	"time"
+	"github.com/chickeniq/go-discovery/pkg/discovery"
 )
 
 type Client struct {
-	Config     *Config
-	PublicKey  string
-	PrivateKey ed25519.PrivateKey
+	MasterKey ed25519.PublicKey
+	ServerURL string
+
+	Identity Identity
 }
 
-// NewClient creates a new Client instance from the provided configuration.
-func New(c *Config) (*Client, error) {
-	keyBytes, err := b64Decode(c.Member.Key)
-	if err != nil {
-		return nil, err
-	}
-
-	key := ed25519.PrivateKey(keyBytes)
-	pubKey := b64Encode(key.Public().(ed25519.PublicKey))
-
+// New creates a new Client instance with the provided master key, server URL, and identity.
+func NewClient(masterKey ed25519.PublicKey, serverURL string, identity Identity) *Client {
 	return &Client{
-		Config:     c,
-		PrivateKey: key,
-		PublicKey:  pubKey,
-	}, nil
+		MasterKey: masterKey,
+		ServerURL: serverURL,
+		Identity:  identity,
+	}
 }
 
-// Sync sends the provided body to the server and retrieves the list of entries, verifying their signatures.
-func (c *Client) Sync(body string) (*[]Entry, error) {
-	timestamp := time.Now().UnixMilli()
-	bodySignature := ed25519.Sign(c.PrivateKey, fmt.Append([]byte(c.Config.Member.Signature), body, timestamp))
+// Sync synchronizes the client's data with the discovery server and returns the list of entries.
+func (c *Client) Sync(data []byte) (*[]Entry, error) {
+	masterKey := base64.StdEncoding.EncodeToString(c.MasterKey)
 
-	data, err := json.Marshal(RequestBody{
-		MasterKey: c.Config.MasterKey,
+	entry := discovery.Entry{
+		Member: *c.Identity.Member(),
+		Body:   *c.Identity.Body(data),
+	}
 
-		Member: Member{
-			Key:       c.PublicKey,
-			Metadata:  c.Config.Member.Metadata,
-			Signature: c.Config.Member.Signature,
-		},
-
-		Body: Body{
-			Data:      body,
-			Timestamp: timestamp,
-			Signature: b64Encode(bodySignature),
-		},
-	})
+	entries, err := discovery.Sync(c.ServerURL, masterKey, entry)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.Post(c.Config.ServerURL, "application/json", bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var entries []Entry
-	if err := json.Unmarshal(respBody, &entries); err != nil {
-		return nil, err
-	}
-
-	masterKey, err := b64Decode(c.Config.MasterKey)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range entries {
-		if !entries[i].IsValid(ed25519.PublicKey(masterKey)) {
-			return nil, fmt.Errorf("invalid entry for member: %s", entries[i].Member.Key)
+	var parsedEntries []Entry
+	for _, e := range *entries {
+		entry, err := ParseEntry(e)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse entry: %w", err)
 		}
+
+		parsedEntries = append(parsedEntries, *entry)
 	}
 
-	return &entries, nil
+	return &parsedEntries, nil
 }
