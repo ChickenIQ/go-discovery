@@ -8,15 +8,19 @@ import (
 	"github.com/chickeniq/go-discovery/pkg/discovery"
 )
 
+type IdentityProvider interface {
+	Member() *discovery.Member
+	NewBody(data []byte) *discovery.Body
+}
+
 type Client struct {
 	MasterKey ed25519.PublicKey
+	Identity  IdentityProvider
 	ServerURL string
-
-	Identity Identity
 }
 
 // New creates a new Client instance with the provided master key, server URL, and identity.
-func NewClient(masterKey ed25519.PublicKey, serverURL string, identity Identity) *Client {
+func NewClient(masterKey ed25519.PublicKey, serverURL string, identity IdentityProvider) *Client {
 	return &Client{
 		MasterKey: masterKey,
 		ServerURL: serverURL,
@@ -30,7 +34,7 @@ func (c *Client) Sync(data []byte) (*[]Entry, error) {
 
 	entry := discovery.Entry{
 		Member: *c.Identity.Member(),
-		Body:   *c.Identity.Body(data),
+		Body:   *c.Identity.NewBody(data),
 	}
 
 	entries, err := discovery.Sync(c.ServerURL, masterKey, entry)
